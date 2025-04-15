@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mahjong Multiplayer Documentation</title>
+    <link rel="stylesheet" href="mahjong-docs-css.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div>
+                <h1>Mahjong Multiplayer System</h1>
+                <p class="subtitle">Technical Documentation for Developers</p>
+            </div>
+            <div class="logo">
+                <img src="https://via.placeholder.com/150x80?text=Mahjong" alt="Mahjong Logo">
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div class="container">
+            <ul class="nav-links">
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#architecture">Architecture</a></li>
+                <li><a href="#authentication">Authentication</a></li>
+                <li><a href="#table-management">Table Management</a></li>
+                <li><a href="#gameplay">Gameplay</a></li>
+                <li><a href="#components">Components</a></li>
+                <li><a href="#events">Events</a></li>
+                <li><a href="#troubleshooting">Troubleshooting</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <main>
+            <section id="overview" class="content-section">
+                <h2>System Overview</h2>
+                <p>
+                    The Mahjong multiplayer system is a client-server architecture that enables real-time Mahjong gameplay across devices. It follows Singapore Mahjong rules and supports all standard game features, including Chow, Pong, Kong, and Hu actions.
+                </p>
+                
+                <div class="info-box">
+                    <h3>Key Features</h3>
+                    <ul>
+                        <li>Real-time multiplayer with WebSockets</li>
+                        <li>Full game lifecycle management</li>
+                        <li>Comprehensive tile claim system</li>
+                        <li>Automatic reconnection handling</li>
+                        <li>Bot player support</li>
+                        <li>Round-based gameplay with proper wind rotation</li>
+                    </ul>
+                </div>
+
+                <h3>How to Use This Documentation</h3>
+                <p>
+                    This guide covers the entire multiplayer flow from login to game completion. It's organized to follow the player's journey through the system, with detailed explanations of the underlying components and communication protocols. Use the navigation menu to jump to specific sections.
+                </p>
+            </section>
+
+            <section id="architecture" class="content-section">
+                <h2>Architecture Overview</h2>
+                
+                <div class="architecture-diagram">
+                    <div class="layer client">
+                        <h4>Unity Client</h4>
+                        <div class="component">
+                            <span>UI Layer</span>
+                            <p>WaitingPanel, GamePlayController</p>
+                        </div>
+                        <div class="component">
+                            <span>Game Logic</span>
+                            <p>MahjongGameManager, MahjongTileController</p>
+                        </div>
+                        <div class="component">
+                            <span>Network Layer</span>
+                            <p>NewMahjongNetworkManager, MahjongSocketHandler</p>
+                        </div>
+                        <div class="component primary">
+                            <span>Core Network</span>
+                            <p>SocketFramework</p>
+                        </div>
+                    </div>
+                    
+                    <div class="connection-line">
+                        <div class="arrow left"></div>
+                        <span>Socket.IO Events</span>
+                        <div class="arrow right"></div>
+                    </div>
+                    
+                    <div class="layer server">
+                        <h4>Node.js Server</h4>
+                        <div class="component primary">
+                            <span>Socket.IO Server</span>
+                            <p>server.js, socketHandlers.js</p>
+                        </div>
+                        <div class="component">
+                            <span>Game Logic</span>
+                            <p>gameManager.js</p>
+                        </div>
+                        <div class="component">
+                            <span>Data Management</span>
+                            <p>dataStore.js, models.js</p>
+                        </div>
+                        <div class="component">
+                            <span>Infrastructure</span>
+                            <p>config.js, logger.js, middleware.js</p>
+                        </div>
+                    </div>
+                </div>
+
+                <h3>Design Principles</h3>
+                <div class="principles">
+                    <div class="principle">
+                        <h4>Server Authority</h4>
+                        <p>Server validates all moves and maintains the single source of truth for game state.</p>
+                    </div>
+                    <div class="principle">
+                        <h4>Event-Driven Communication</h4>
+                        <p>Bidirectional events enable real-time updates and responsive gameplay.</p>
+                    </div>
+                    <div class="principle">
+                        <h4>Component Separation</h4>
+                        <p>Clear boundaries between networking, game logic, and visual presentation.</p>
+                    </div>
+                    <div class="principle">
+                        <h4>Fault Tolerance</h4>
+                        <p>Robust reconnection handling and error recovery mechanisms.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="authentication" class="content-section">
+                <h2>Authentication & Connection</h2>
+                
+                <h3>Login Flow</h3>
+                <div class="flow-diagram">
+                    <div class="flow-step">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <h4>Authentication with Backend</h4>
+                            <p>Client authenticates with API server to receive JWT token.</p>
+                            <pre><code>// Authentication to get JWT token
+AuthManager.Login(username, password, (token) => {
+    // Store token and proceed to socket connection
+    PlayerPrefs.SetString("AuthToken", token);
+    ConnectToSocketServer(token);
+});</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="flow-step">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <h4>Socket Connection with Token</h4>
+                            <p>Client connects to Socket.IO server using the JWT for authentication.</p>
+                            <pre><code>// In InitializeNetworkConnection.cs
+BusManager.EventBus.Publish(new UserLoginSuccessEvent(token));
+
+// In NewMahjongNetworkManager.cs
+public void Connect(UserLoginSuccessEvent evt) {
+    if (!SocketFramework.Instance.IsConnected) {
+        SocketFramework.Instance.Connect(evt.AccessToken);
+    }
+}</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="flow-step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <h4>Server Validation</h4>
+                            <p>Server validates token and associates the socket with the user ID.</p>
+                            <pre><code>// Server-side middleware.js
+function authMiddleware(socket, next) {
+    const token = socket.handshake.auth.token;
+    
+    // Verify token validity
+    try {
+        const decoded = jwt.verify(token, config.jwt.secret);
+        // Store userId in socket for future reference
+        socket.userId = decoded.userId;
+        next();
+    } catch (error) {
+        next(new Error('Authentication error'));
+    }
+}</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="flow-step">
+                        <div class="step-number">4</div>
+                        <div class="step-content">
+                            <h4>Login Success</h4>
+                            <p>Server sends back user data and connection is established.</p>
+                            <pre><code>// In MahjongSocketHandler.cs
+SocketFramework.Instance.Listen<LoginSuccessResponse>(
+    SocketEvents.LOGIN_SUCCESS, 
+    OnLoginSuccess
+);
+
+private void OnLoginSuccess(LoginSuccessResponse response) {
+    userId = response.user.id;
+    username = response.user.username;
+    BusManager.EventBus.Publish(
+        new SocketConnectedEvent(userId, username)
+    );
+}</code></pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="note-box">
+                    <h4>Authentication Notes</h4>
+                    <ul>
+                        <li>JWT tokens are stored securely and included in all socket connections</li>
+                        <li>Socket.IO connection uses WebSockets with fallback to HTTP long-polling</li>
+                        <li>Connection state is monitored for automatic reconnection</li>
+                        <li>SocketFramework includes retry logic for unstable networks</li>
+                    </ul>
+                </div>
+            </section>
+
+            <section id="table-management" class="content-section">
+                <h2>Table Management</h2>
+                
+                <h3>Creating a Table</h3>
+                <div class="two-column">
+                    <div class="column">
+                        <h4>Client Process</h4>
+                        <ol class="step-list">
+                            <li>
+                                <span class="step-title">Request Table Creation</span>
+                                <p>Client sends a create-table request with configuration settings</p>
+                            </li>
+                            <li>
+                                <span class="step-title">Receive Table ID</span>
+                                <p>Server generates a unique ID and creates table record</p>
+                            </li>
+                            <li>
+                                <span class="step-title">Join Table Room</span>
+                                <p>Client is automatically added to the table's socket room</p>
+                            </li>
+                            <li>
+                                <span class="step-title">Display Waiting Panel</span>
+                                <p>UI updates to show the waiting screen for other players</p>
+                            </li>
+                        </ol>
+                    </div>
+                    <div class="column">
+                        <pre><code>// Create table configuration
+TableConfigNew tableConfig = new TableConfigNew
+{
+    tableName = "My Game",
+    shooter = "Default",
+    minimumTai = 1,
+    maximumTai = 5,
+    defaultTimer = 30,
+    specialTile = "Flower only"
+};
+
+// Create table data
+TableDataNewUI tableData = new TableDataNewUI
+{
+    tableId = System.Guid.NewGuid().ToString(),
+    clubId = "default",
+    tableConfig = tableConfig
+};
+
+// Create response wrapper
+TableResponseNew response = new TableResponseNew
+{
+    success = true,
+    message = "Table created",
+    data = tableData
+};
+
+// Send request
+BusManager.MessageBus.Publish(
+    new CreateTableRequest(response)
+);</code></pre>
+                    </div>
+                </div>
+
+                <h3>Joining a Table</h3>
+                <div class="two-column">
+                    <div class="column">
+                        <pre><code>// Get available tables
+BusManager.MessageBus.Publish(
+    new GetTablesRequest("default")
+);
+
+// Handle tables list
+private void OnTablesRetrieved(TablesRetrievedEvent evt) {
+    // Update UI with available tables
+    foreach (var table in evt.Tables) {
+        AddTableToUI(table);
+    }
+}
+
+// Join selected table
+public void JoinTable(string tableId) {
+    BusManager.MessageBus.Publish(
+        new JoinTableRequest(tableId)
+    );
+}
+
+// Handle join success
+private void OnJoinedTable(JoinedTableEvent evt) {
+    ShowWaitingRoom(evt.Table);
+}</code></pre>
+                    </div>
+                    <div class="column">
+                        <h4>Server Validation</h4>
+                        <div class="validation-rules">
+                            <div class="rule">
+                                <span class="rule-name">Table Exists</span>
+                                <p>Verifies the requested table ID exists in the system</p>
+                            </div>
+                            <div class="rule">
+                                <span class="rule-name">Not Full</span>
+                                <p>Table must have fewer than maximum players (4)</p>
+                            </div>
+                            <div class="rule">
+                                <span class="rule-name">Game Not Started</span>
+                                <p>Cannot join tables where gameplay has begun</p>
+                            </div>
+                            <div class="rule">
+                                <span class="rule-name">Not Already Joined</span>
+                                <p>Player must not already be at this or another table</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h3>Waiting Room</h3>
+                <div class="info-box">
+                    <p>The waiting room (WaitingPanel.cs) manages the pre-game player experience:</p>
+                    <ul>
+                        <li><strong>Player Ready Status:</strong> Players click "Ready" to indicate they're prepared to start</li>
+                        <li><strong>Auto-Start:</strong> Game begins when all players (minimum 4) are ready</li>
+                        <li><strong>Auto-Fill with Bots:</strong> Optional feature to fill remaining seats with computer players</li>
+                        <li><strong>Leave Table:</strong> Players can leave the table before the game starts</li>
+                    </ul>
+                </div>
+
+                <div class="code-snippet">
+                    <h4>Ready Status Update</h4>
+                    <pre><code>// In WaitingPanel.cs
+private void OnReadyButtonClicked()
+{
+    if (string.IsNullOrEmpty(currentTableId))
+        return;
+
+    // Set the player ready state
+    BusManager.MessageBus.Publish(new SetPlayerReadyRequest(currentTableId));
+
+    // Disable ready button after clicking
+    readyButton.interactable = false;
+    isReady = true;
+
+    if (statusText != null)
+        statusText.text = "You are ready! Waiting for other players...";
+}</code></pre>
+                </div>
+            </section>
+
+            <section id="gameplay" class="content-section">
+                <h2>Gameplay Flow</h2>
+                
+                <div class="phase-tracker">
+                    <div class="phase">
+                        <div class="phase-dot"></div>
+                        <span>Game Preparation</span>
+                    </div>
+                    <div class="phase">
+                        <div class="phase-dot"></div>
+                        <span>Tile Distribution</span>
+                    </div>
+                    <div class="phase">
+                        <div class="phase-dot"></div>
+                        <span>Round Start</span>
+                    </div>
+                    <div class="phase">
+                        <div class="phase-dot"></div>
+                        <span>Gameplay Loop</span>
+                    </div>
+                    <div class="phase">
+                        <div class="phase-dot"></div>
+                        <span>Round End</span>
+                    </div>
+                    <div class="phase">
+                        <div class="phase-dot"></div>
+                        <span>Game Completion</span>
+                    </div>
+                </div>
+                
+                <h3>Game Preparation</h3>
+                <div class="sequence-diagram">
+                    <div class="sequence-step">
+                        <div class="sequence-client">
+                            <span class="event-label">ALL PLAYERS READY</span>
+                        </div>
+                        <div class="sequence-arrow"></div>
+                        <div class="sequence-server">
+                            <span class="event-label">Server prepares game state</span>
+                            <p>- Assigns dealer (East wind)</p>
+                            <p>- Assigns winds to players</p>
+                            <p>- Shuffles tiles</p>
+                        </div>
+                    </div>
+                    <div class="sequence-step">
+                        <div class="sequence-client">
+                            <p>Load game scene</p>
+                        </div>
+                        <div class="sequence-arrow reverse"></div>
+                        <div class="sequence-server">
+                            <span class="event-label">start-game</span>
+                            <p>Sends signal to start game with initial data</p>
+                        </div>
+                    </div>
+                    <div class="sequence-step">
+                        <div class="sequence-client">
+                            <span class="event-label">game-started</span>
+                            <p>Confirms game scene is loaded</p>
+                        </div>
+                        <div class="sequence-arrow"></div>
+                        <div class="sequence-server">
+                            <p>Server receives confirmation</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="code-snippet">
+                    <h4>Server Game Preparation</h4>
+                    <pre><code>// gameManager.js
+prepareGame(table) {
+    // Set game status to preparing
+    table.tableState.status = 'preparing';
+
+    // Initialize game state for Singapore Mahjong
+    table.gameState = {
+        currentRound: 1,
+        totalRounds: 16,
+        currentWind: WINDS.EAST,
+        dealerPosition: 0,
+        roundsWithCurrentDealer: 1,
+        roundScores: [],
+        bonusRound: false
+    };
+
+    // Set initial dealer (East Wind)
+    const dealerIndex = 0;
+    table.tableState.players[dealerIndex].isDealer = true;
+    table.tableState.players[dealerIndex].wind = WINDS.EAST;
+
+    // Assign winds to other players
+    for (let i = 0; i < table.tableState.players.length; i++) {
+        if (i !== dealerIndex) {
+            table.tableState.players[i].wind = 
+                WIND_ORDER[(i - dealerIndex + 4) % 4];
+        }
+    }
+
+    // Shuffle tiles
+    const tiles = this.createAndShuffleTiles();
+    table.wall = tiles;
+
+    return {
+        success: true,
+        dealerIndex: dealerIndex
+    };
+}</code></pre>
+                </div>
+
+                <h3>Tile Distribution</h3>
+                <div class="sequence-diagram">
+                    <div class="sequence-step">
+                        <div class="sequence-client">
+                            <p>All players have loaded game scene</p>
+                        </div>
+                        <div class="sequence-arrow reverse"></div>
+                        <div class="sequence-server">
+                            <span class="event-label">distribute-tiles</span>
+                            <p>Sends to each player their specific hand data</p>
+                        </div>
+                    </div>
+                    <div class="sequence-step">
+                        <div class="sequence-client">
+                            <p>Display tiles on screen</p>
+                            <p>Create 3D tile objects</p>
+                        </div>
+                        <div class="sequence-client">
+                            <span class="event-label">tiles-distributed</span>
+                            <p>Confirm tiles received and displayed</p>
+                        </div>
+                        <div class="sequence-arrow"></div>
+                        <div class="sequence-server">
+                            <p>Server tracks distribution status</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="code-snippet">
+                    <h4>Client Tile Display</h4>
+                    <pre><code>// In GamePlayController.cs
+private void OnTilesDistributed(TilesDistributedEvent evt)
+{
+    Debug.Log($"Tiles distributed event received. Hand has {evt.Hand.Length} tiles.");
+    tableId = evt.TableId;
+    currentHand = evt.Hand;
+    currentRound = evt.Round;
+    currentWind = evt.Wind;
+
+    // Display the tiles in the UI
+    DisplayPlayerHand(evt.Hand);
+
+    // Update round info
+    UpdateRoundInfo(evt.Round, evt.Wind, evt.IsDealer ? "You" : "Another Player");
+
+    // Update status
+    UpdateStatusText("Tiles distributed. Waiting for round to start...");
+
+    // After displaying the tiles, notify the server
+    StartCoroutine(DelayedNotifyTilesDistributed());
+}</code></pre>
+                </div>
+
+                <h3>Round Start</h3>
+                <div class="sequence-diagram">
+                    <div class="sequence-step">
+                        <div class="sequence-client">
+                            <p>All players have received tiles</p>
+                        </div>
+                        <div class="sequence-arrow reverse"></div>
+                        <div class="sequence-server">
+                            <span class="event-label">start-round</span>
+                            <p>Signals round start with details:</p>
+                            <p>- Round number</p>
+                            <p>- Current wind</p>
+                            <p>- Current turn (dealer)</p>
+                        </div>
+                    </div>
+                    <div class="sequence-step">
+                        <div class="sequence-client">
+                            <span class="event-label">roundStarted</span>
+                            <p>Confirm round has started on client</p>
+                        </div>
+                        <div class="sequence-arrow"></div>
+                        <div class="sequence-server">
+                            <p>Server tracks round start status</p>
+                        </div>
+                    </div>
+                    <div class="sequence-step">
+                        <div class="sequence-server">
+                            <span class="event-label">start-turn</span>
+                            <p>Sent to the current player (dealer)</p>
+                        </div>
+                        <div class="sequence-arrow reverse"></div>
+                        <div class="sequence-client">
+                            <p>Current player's turn begins</p>
+                        </div>
+                    </div>
+                </div>
+
+                <h3>Gameplay Loop</h3>
+                <div class="game-loop-container">
+                    <div class="game-loop">
+                        <div class="loop-step">
+                            <div class="step-title">Draw Tile</div>
+                            <div class="step-description">
+                                <p>Current player draws a tile</p>
+                                <p><code>draw-tile → tile-drawn</code></p>
+                            </div>
+                        </div>
+                        <div class="loop-step">
+                            <div class="step-title">Discard Tile</div>
+                            <div class="step-description">
+                                <p>Player chooses a tile to discard</p>
+                                <p><code>discard-tile → tile-discarded</code></p>
+                            </div>
+                        </div>
+                        <div class="loop-step">
+                            <div class="step-title">Claim Opportunity</div>
+                            <div class="step-description">
+                                <p>Other players can claim discarded tile</p>
+                                <p><code>opportunity-* → *Decision</code></p>
+                            </div>
+                        </div>
+                        <div class="loop-step">
+                            <div class="step-title">Next Turn</div>
+                            <div class="step-description">
+                                <p>Turn advances to next player</p>
+                                <p><code>turn-update → turnAcknowledged</code></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="special-moves">
+                        <h4>Special Actions</h4>
+                        <div class="move-item">
+                            <span class="move-name">Chow</span>
+                            <p>Claim tile to form a sequence (only next player)</p>
+                        </div>
+                        <div class="move-item">
+                            <span class="move-name">Pong</span>
+                            <p>Claim tile to form a triplet (any player)</p>
+                        </div>
+                        <div class="move-item">
+                            <span class="move-name">Kong</span>
+                            <p>Claim tile or declare from hand to form a set of 4</p>
+                        </div>
+                        <div class="move-item">
+                            <span class="move-name">Hu</span>
+                            <p>Claim tile or declare from hand to win the round</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="two-column">
+                    <div class="column">
+                        <h4>Draw Tile Process</h4>
+                        <pre><code>// GamePlayController.cs
+public void DrawTile()
+{
+    Debug.Log("Drawing tile");
+    BusManager.MessageBus.Publish(
+        new DrawTileMessage(tableId)
+    );
+}
+
+// MahjongSocketHandler.cs
+private void OnTileDrawn(TileDrawnResponse response)
+{
+    Debug.Log($"Tile drawn: {response.drawnTile}");
+    
+    // Publish event through BusManager
+    BusManager.EventBus.Publish(new TileDrawnEvent(
+        response.hand,
+        response.drawnTile,
+        response.isReplacement
+    ));
+}
+
+// Game response to event
+private void OnTileDrawn(TileDrawnEvent evt)
+{
+    currentHand = evt.Hand;
+    
+    // Update UI to show drawn tile
+    DisplayPlayerHand(evt.Hand);
+    
+    if (evt.IsReplacement)
+        UpdateStatusText($"Replacement tile drawn");
+    else
+        UpdateStatusText($"You drew: {evt.DrawnTile}");
+        
+    // Enable tile interaction
+    EnableTileInteraction(true);
+}</code></pre>
+                    </div>
+                    <div class="column">
+                        <h4>Discard Tile Process</h4>
+                        <pre><code>// GamePlayController.cs
+public void DiscardTile(string tile)
+{
+    Debug.Log($"Discarding tile {tile}");
+    BusManager.MessageBus.Publish(
+        new DiscardTileMessage(tableId, tile)
+    );
+}
+
+// MahjongSocketHandler.cs
+private void OnTileDiscarded(TileDiscardedResponse response)
+{
+    Debug.Log($"Tile discarded: {response.tile}");
+    
+    // Publish event through BusManager
+    BusManager.EventBus.Publish(new TileDiscardedEvent(
+        response.playerId,
+        response.tile,
+        response.nextTurn
+    ));
+}
+
+// Game response to event
+private void OnTileDiscarded(TileDiscardedEvent evt)
+{
+    // Update UI to show discarded tile
+    AddTileToDiscardZone(evt.Tile, evt.PlayerId);
+    
+    // Save info for claim actions
+    latestDiscardedTile = evt.Tile;
+    latestDiscardedBy = evt.PlayerId;
+    
+    // Update turn state
+    isMyTurn = evt.NextTurn == NewMahjongNetworkManager.Instance.UserId;
+    EnableTileInteraction(isMyTurn);
+}</code></pre>
+                    </div>
+                </div>
+
+                <div class="code-snippet">
+                    <h4>Claim Opportunity Handling</h4>
+                    <pre><code>// Server identifies claim opportunities
+const claimable = gameManager.checkTileClaimable(table, tile, userId);
+
+if (claimable.chow.length > 0) {
+    // Only the next player in turn order can Chow
+    const chowPlayerId = claimable.chow[0];
+    socket.server.to(socketId).emit('opportunity-chow', {
+        tableId: table.tableId,
+        tile: tile,
+        discardedBy: userId
+    });
+}
+
+// Client response to opportunity
+private void OnChowOpportunity(ChowOpportunityEvent evt)
+{
+    // Show UI for player to decide
+    List<string> availableClaims = new List<string> { "chow" };
+    ShowClaimButtons(availableClaims);
+    
+    // Store the tile info for the claim action
+    latestDiscardedTile = evt.Tile;
+    latestDiscardedBy = evt.DiscardedBy;
+}
+
+// Player decision
+public void SendChowDecision(string decision, string tile)
+{
+    BusManager.MessageBus.Publish(
+        new ChowDecisionMessage(tableId, decision, tile)
+    );
+    
+    if (decision == "claim")
+        HideClaimButtons();
+}</code></pre>
+                </div>
+
+                <h3>Round End</h3>
+                <div class="sequence-diagram">
+                    <div class="sequence-step">
+                        <div class="sequence-client">
+                            <span class="event-label">declareHu</span>
+                            <p>Player declares winning hand</p>
+                        </div>
+                        <div class="sequence-arrow"></div>
+                        <div class="sequence-server">
+                            <p>Server validates win and calculates score</p>
+                        </div>
+                    </div>
+                    <div class="sequence-step">
+                        <div class="sequence-client">
+                            <p>Display round results</p>
+                            <p>Show winner and scores</p>
+                        </div>
+                        <div class="sequence-arrow reverse"></div>
+                        <div class="sequence-server">
+                            <span class="event-label">round-ended</span>
+                            <p>Sends round completion details</p>
+                        </div>
+                    </div>
+                    <div class="sequence-step">
+                        <div class="sequence-client">
+                            <span class="event-label">roundEnded</span>
+                            <p>Confirm round end acknowledgment</p>
+                        </div>
+                        <div class="sequence-arrow"></div>
+                        <div class="sequence-server">
+                            <p>Prepare for next round if game not complete</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <h4>Round End Conditions</h4>
+                    <ul>
+                        <li><strong>Player Win (Hu)</strong>: A player completes a valid winning hand</li>
+                        <li><strong>Wall Empty</strong>: All tiles have been drawn (ends in draw)</li>
+                        <li><strong>Score Calculation</strong>: Server calculates score based on winning hand pattern</li>
+                        <li><strong>Dealer Continuity</strong>: If dealer wins, they keep dealer position for next round</li>
+                        <li><strong>Wind Rotation</strong>: After each player has been dealer once, wind changes (East→South→West→North)</li>
+                    </ul>
+                </div>
+
+                <h3>Game Completion</h3>
+                <div class="sequence-diagram">
+                    <div class="sequence-step">
+                        <div class="sequence-client">
+                            <p>Game completion criteria met</p>
+                        </div>
+                        <div class="sequence-arrow reverse"></div>
+                        <div class="sequence-server">
+                            <span class="event-label">game-ended</span>
+                            <p>Sends final game results and rankings</p>
+                        </div>
+                    </div>
+                    <div class="sequence-step">
+                        <div class="sequence-client">
+                            <p>Display final results screen</p>
+                            <p>Show player rankings and scores</p>
+                        </div>
+                        <div class="sequence-client">
+                            <span class="event-label">gameEndAcknowledged</span>
+                            <p>Confirm receipt of game end</p>
+                        </div>
+                        <div class="sequence-arrow"></div>
+                        <div class="sequence-server">
+                            <p>Finalize game records</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="code-snippet">
+                    <h4>Game End Processing</h4>
+                    <pre><code>// Server-side
+finalizeGame(table) {
+    // Set game status to completed
+    table.tableState.status = 'completed';
+
+    // Calculate final rankings
+    const rankings = table.tableState.players
+        .map(player => ({
+            id: player.id,
+            username: player.username,
+            totalScore: player.totalScore || 0,
+            isBot: player.isBot
+        }))
+        .sort((a, b) => b.totalScore - a.totalScore);
+
+    // Update player stats
+    if (rankings.length > 0) {
+        const winningPlayerId = rankings[0].id;
+        const user = dataStore.getUser(winningPlayerId);
+        if (user && !user.isBot) {
+            user.stats.gamesPlayed++;
+            user.stats.wins++;
+        }
+    }
+
+    return {
+        success: true,
+        rankings: rankings
+    };
+}
+
+// Client-side
+private void OnGameEnded(GameEndedEvent evt)
+{
+    tableId = evt.TableId;
+    isGameInProgress = false;
+    
+    // Show game result UI
+    ShowGameResults(evt.Rankings, evt.Message);
+    
+    // After showing results, acknowledge game end
+    StartCoroutine(DelayedNotifyGameEndAcknowledged());
+}</code></pre>
+                </div>
+            </section>
+
+            <section id="components" class="content-section">
+                <h2>Core Components</h2>
+                
+                <div class="component-list">
+                    <div class="component-item">
+                        <div class="component-header">
+                            <h3>SocketFramework.cs</h3>
+                            <span class="component-type">Network Core</span>
+                        </div>
+                        <div class="component-description">
+                            <p>Low-level Socket.IO client implementation that handles the core socket connection, event management, and reconnection logic.</p>
+                            <ul>
+                                <li>Manages WebSocket connections with automatic reconnection</li>
+                                <li>Provides generic type-safe event handling</li>
+                                <li>Handles internet connectivity changes</li>
+                                <li>Implements timeouts and retry logic</li>
+                                <li>Manages connection token authentication</li>
+                            </ul>
+                        </div>
+                        <div class="component-code">
+                            <pre><code>// Core methods
+SocketFramework.Instance.Connect(authToken);
+SocketFramework.Instance.Listen<T>(eventName, callback);
+SocketFramework.Instance.Emit(eventName, data);
+SocketFramework.Instance.Disconnect();</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="component-item">
+                        <div class="component-header">
+                            <h3>NewMahjongNetworkManager.cs</h3>
+                            <span class="component-type">Game Network Layer</span>
+                        </div>
+                        <div class="component-description">
+                            <p>Singleton that manages all game-specific network operations and translates between socket events and the game's event system.</p>
+                            <ul>
+                                <li>Registers event handlers for all game socket events</li>
+                                <li>Translates raw socket events to game events</li>
+                                <li>Provides game-specific network methods</li>
+                                <li>Manages connection state and user data</li>
+                            </ul>
+                        </div>
+                        <div class="component-code">
+                            <pre><code>// Key methods
+NewMahjongNetworkManager.Instance.Connect(evt.AccessToken);
+NewMahjongNetworkManager.Instance.CreateTable(request);
+NewMahjongNetworkManager.Instance.JoinTable(request);
+NewMahjongNetworkManager.Instance.LeaveTable(request);</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="component-item">
+                        <div class="component-header">
+                            <h3>MahjongSocketHandler.cs</h3>
+                            <span class="component-type">Socket Event Handler</span>
+                        </div>
+                        <div class="component-description">
+                            <p>Handles all game-specific socket events and translates them to and from the game's internal event system.</p>
+                            <ul>
+                                <li>Registers socket listeners for all game events</li>
+                                <li>Converts socket data to game event objects</li>
+                                <li>Publishes game events to EventBus</li>
+                                <li>Serializes and sends message bus events to server</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="component-item">
+                        <div class="component-header">
+                            <h3>GamePlayController.cs</h3>
+                            <span class="component-type">Game Core</span>
+                        </div>
+                        <div class="component-description">
+                            <p>Central controller for Mahjong gameplay that handles the core game logic, user interactions, and UI updates.</p>
+                            <ul>
+                                <li>Subscribes to network events for game state updates</li>
+                                <li>Handles player inputs and sends actions to server</li>
+                                <li>Manages tile display and discard zones</li>
+                                <li>Controls game flow (rounds, turns, etc.)</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="component-item">
+                        <div class="component-header">
+                            <h3>MahjongGameManager.cs</h3>
+                            <span class="component-type">Game State Manager</span>
+                        </div>
+                        <div class="component-description">
+                            <p>Manages the game state and coordinates between the network events and the visual representation.</p>
+                            <ul>
+                                <li>Tracks game state (tiles, players, turns)</li>
+                                <li>Creates and manages tile objects</li>
+                                <li>Handles player views and UI updates</li>
+                                <li>Coordinates game flow and animations</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="component-item">
+                        <div class="component-header">
+                            <h3>MahjongTileController.cs</h3>
+                            <span class="component-type">UI Interaction</span>
+                        </div>
+                        <div class="component-description">
+                            <p>Controls individual tile behavior including selection, movement, and discard animations.</p>
+                            <ul>
+                                <li>Manages tile selection and highlighting</li>
+                                <li>Controls tile animations (raise, discard, etc.)</li>
+                                <li>Handles click/touch input on tiles</li>
+                                <li>Manages visual state of tiles (selected, melded, etc.)</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="component-item">
+                        <div class="component-header">
+                            <h3>PlayerNetworkView.cs</h3>
+                            <span class="component-type">Player Representation</span>
+                        </div>
+                        <div class="component-description">
+                            <p>UI representation of each player, showing their status, discards, and melded sets.</p>
+                            <ul>
+                                <li>Displays player information (name, score, wind)</li>
+                                <li>Shows turn indicators and status effects</li>
+                                <li>Manages player's discard and meld areas</li>
+                                <li>Visualizes turn timer and dealer status</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="events" class="content-section">
+                <h2>Network Events</h2>
+                
+                <p>The Mahjong multiplayer system uses a comprehensive set of events for bidirectional communication between client and server.</p>
+                
+                <div class="tab-container">
+                    <div class="tab-header">
+                        <div class="tab-button active" data-tab="client-to-server">Client to Server</div>
+                        <div class="tab-button" data-tab="server-to-client">Server to Client</div>
+                    </div>
+                    
+                    <div class="tab-content">
+                        <div class="tab-panel active" id="client-to-server">
+                            <table class="event-table">
+                                <thead>
+                                    <tr>
+                                        <th>Event Name</th>
+                                        <th>Payload</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>game-started</td>
+                                        <td><code>{ tableId }</code></td>
+                                        <td>Notifies server that the game scene is loaded and ready</td>
+                                    </tr>
+                                    <tr>
+                                        <td>tiles-distributed</td>
+                                        <td><code>{ tableId }</code></td>
+                                        <td>Confirms that tiles have been received and displayed</td>
+                                    </tr>
+                                    <tr>
+                                        <td>roundStarted</td>
+                                        <td><code>{ tableId }</code></td>
+                                        <td>Confirms that the round has started on client</td>
+                                    </tr>
+                                    <tr>
+                                        <td>turnAcknowledged</td>
+                                        <td><code>{ tableId }</code></td>
+                                        <td>Confirms receipt of turn notification</td>
+                                    </tr>
+                                    <tr>
+                                        <td>draw-tile</td>
+                                        <td><code>{ tableId }</code></td>
+                                        <td>Requests to draw a tile from the wall</td>
+                                    </tr>
+                                    <tr>
+                                        <td>discard-tile</td>
+                                        <td><code>{ tableId, tile }</code></td>
+                                        <td>Requests to discard specified tile</td>
+                                    </tr>
+                                    <tr>
+                                        <td>chowDecision</td>
+                                        <td><code>{ tableId, decision, tile }</code></td>
+                                        <td>Response to chow opportunity (claim/pass)</td>
+                                    </tr>
+                                    <tr>
+                                        <td>pongDecision</td>
+                                        <td><code>{ tableId, decision, tile }</code></td>
+                                        <td>Response to pong opportunity (claim/pass)</td>
+                                    </tr>
+                                    <tr>
+                                        <td>kongDecision</td>
+                                        <td><code>{ tableId, decision, tile }</code></td>
+                                        <td>Response to kong opportunity (claim/pass)</td>
+                                    </tr>
+                                    <tr>
+                                        <td>declareConcealedKong</td>
+                                        <td><code>{ tableId, tile }</code></td>
+                                        <td>Declares a concealed kong from hand</td>
+                                    </tr>
+                                    <tr>
+                                        <td>declareHu</td>
+                                        <td><code>{ tableId, tile, isSelfDraw }</code></td>
+                                        <td>Declares a winning hand</td>
+                                    </tr>
+                                    <tr>
+                                        <td>roundEnded</td>
+                                        <td><code>{ tableId }</code></td>
+                                        <td>Acknowledges round end</td>
+                                    </tr>
+                                    <tr>
+                                        <td>nextRoundReady</td>
+                                        <td><code>{ tableId }</code></td>
+                                        <td>Signals ready for next round</td>
+                                    </tr>
+                                    <tr>
+                                        <td>gameEndAcknowledged</td>
+                                        <td><code>{ tableId }</code></td>
+                                        <td>Acknowledges game end</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div class="tab-panel" id="server-to-client">
+                            <table class="event-table">
+                                <thead>
+                                    <tr>
+                                        <th>Event Name</th>
+                                        <th>Payload</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>login-success</td>
+                                        <td><code>{ user: UserData }</code></td>
+                                        <td>Sent after successful authentication</td>
+                                    </tr>
+                                    <tr>
+                                        <td>start-game</td>
+                                        <td><code>{ tableId, message, dealerIndex }</code></td>
+                                        <td>Signals to start game preparation</td>
+                                    </tr>
+                                    <tr>
+                                        <td>distribute-tiles</td>
+                                        <td><code>{ tableId, hand, dealer, wind, ... }</code></td>
+                                        <td>Sends initial tiles to each player</td>
+                                    </tr>
+                                    <tr>
+                                        <td>start-round</td>
+                                        <td><code>{ tableId, round, wind, currentTurn, ... }</code></td>
+                                        <td>Signals start of a new round</td>
+                                    </tr>
+                                    <tr>
+                                        <td>start-turn</td>
+                                        <td><code>{ tableId, message, canDraw, ... }</code></td>
+                                        <td>Notifies player it's their turn</td>
+                                    </tr>
+                                    <tr>
+                                        <td>turn-update</td>
+                                        <td><code>{ tableId, currentTurn, currentPlayerName }</code></td>
+                                        <td>Updates whose turn it currently is</td>
+                                    </tr>
+                                    <tr>
+                                        <td>tile-drawn</td>
+                                        <td><code>{ hand, drawnTile, isReplacement }</code></td>
+                                        <td>Confirms tile draw to player</td>
+                                    </tr>
+                                    <tr>
+                                        <td>player-drew-tile</td>
+                                        <td><code>{ playerId }</code></td>
+                                        <td>Notifies others a player drew a tile</td>
+                                    </tr>
+                                    <tr>
+                                        <td>hand-updated</td>
+                                        <td><code>{ hand, melded }</code></td>
+                                        <td>Updates player's current hand</td>
+                                    </tr>
+                                    <tr>
+                                        <td>tile-discarded</td>
+                                        <td><code>{ playerId, tile, nextTurn }</code></td>
+                                        <td>Broadcasts discarded tile</td>
+                                    </tr>
+                                    <tr>
+                                        <td>opportunity-chow</td>
+                                        <td><code>{ tableId, tile, discardedBy }</code></td>
+                                        <td>Notifies player can claim for chow</td>
+                                    </tr>
+                                    <tr>
+                                        <td>opportunity-pong</td>
+                                        <td><code>{ tableId, tile, discardedBy }</code></td>
+                                        <td>Notifies player can claim for pong</td>
+                                    </tr>
+                                    <tr>
+                                        <td>opportunity-kong</td>
+                                        <td><code>{ tableId, tile, discardedBy }</code></td>
+                                        <td>Notifies player can claim for kong</td>
+                                    </tr>
+                                    <tr>
+                                        <td>opportunity-hu</td>
+                                        <td><code>{ tableId, tile, discardedBy }</code></td>
+                                        <td>Notifies player can claim for win</td>
+                                    </tr>
+                                    <tr>
+                                        <td>round-ended</td>
+                                        <td><code>{ tableId, result, message, ... }</code></td>
+                                        <td>Indicates round completion</td>
+                                    </tr>
+                                    <tr>
+                                        <td>prepare-next-round</td>
+                                        <td><code>{ tableId, round, wind, ... }</code></td>
+                                        <td>Signals to prepare for next round</td>
+                                    </tr>
+                                    <tr>
+                                        <td>game-ended</td>
+                                        <td><code>{ tableId, message, rankings }</code></td>
+                                        <td>Signals game end with rankings</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="troubleshooting" class="content-section">
+                <h2>Troubleshooting Guide</h2>
+                
+                <h3>Common Issues and Solutions</h3>
+                
+                <div class="issues-container">
+                    <div class="issue-item">
+                        <div class="issue-header">
+                            <h4>Tile Interaction Problems</h4>
+                        </div>
+                        <div class="issue-content">
+                            <div class="issue-symptoms">
+                                <h5>Symptoms</h5>
+                                <ul>
+                                    <li>Cannot select or discard tiles when it should be possible</li>
+                                    <li>Tiles appear but don't respond to clicks</li>
+                                    <li>Tile selection doesn't visually update</li>
+                                </ul>
+                            </div>
+                            <div class="issue-solutions">
+                                <h5>Solutions</h5>
+                                <ul>
+                                    <li><strong>Turn State Mismatch</strong>: Verify <code>isMyTurn</code> state in GamePlayController matches server state</li>
+                                    <li><strong>EnableTileInteraction</strong>: Check that this method is being called when the turn starts</li>
+                                    <li><strong>MahjongTileController</strong>: Ensure this component is attached to all tile prefabs</li>
+                                    <li><strong>Animation Blocking</strong>: Check if tiles are in the "isMoving" state which blocks interaction</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="issue-item">
+                        <div class="issue-header">
+                            <h4>Network Synchronization Issues</h4>
+                        </div>
+                        <div class="issue-content">
+                            <div class="issue-symptoms">
+                                <h5>Symptoms</h5>
+                                <ul>
+                                    <li>Player sees different game state than others</li>
+                                    <li>Actions not reflected correctly</li>
+                                    <li>Tiles drawn/discarded but not visible to others</li>
+                                </ul>
+                            </div>
+                            <div class="issue-solutions">
+                                <h5>Solutions</h5>
+                                <ul>
+                                    <li><strong>Missing Event Handlers</strong>: Ensure all event handlers are properly registered in <code>SubscribeToEvents()</code></li>
+                                    <li><strong>Event Handler Exceptions</strong>: Check console for errors and verify handlers don't throw exceptions</li>
+                                    <li><strong>TableId Consistency</strong>: Ensure <code>tableId</code> is correctly passed in all network messages</li>
+                                    <li><strong>Socket Connection</strong>: Check that <code>SocketFramework.Instance.IsConnected</code> returns true</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="issue-item">
+                        <div class="issue-header">
+                            <h4>Claim Button Problems</h4>
+                        </div>
+                        <div class="issue-content">
+                            <div class="issue-symptoms">
+                                <h5>Symptoms</h5>
+                                <ul>
+                                    <li>Claim buttons don't appear when they should</li>
+                                    <li>Buttons remain visible when they shouldn't</li>
+                                    <li>Buttons appear but don't function</li>
+                                </ul>
+                            </div>
+                            <div class="issue-solutions">
+                                <h5>Solutions</h5>
+                                <ul>
+                                    <li><strong>Event Subscription</strong>: Verify opportunity events are being received and handled</li>
+                                    <li><strong>UI References</strong>: Check that <code>claimActionsPanel</code> and button references are properly set</li>
+                                    <li><strong>Button Listeners</strong>: Ensure <code>SetupButtonListeners()</code> is called and properly sets up all buttons</li>
+                                    <li><strong>HideClaimButtons()</strong>: Check if this is called after a decision or timeout</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="issue-item">
+                        <div class="issue-header">
+                            <h4>Visual Glitches</h4>
+                        </div>
+                        <div class="issue-content">
+                            <div class="issue-symptoms">
+                                <h5>Symptoms</h5>
+                                <ul>
+                                    <li>Tiles appear in wrong positions</li>
+                                    <li>Animations don't complete correctly</li>
+                                    <li>Tiles overlap or clip through each other</li>
+                                </ul>
+                            </div>
+                            <div class="issue-solutions">
+                                <h5>Solutions</h5>
+                                <ul>
+                                    <li><strong>Animation Interruption</strong>: Check for cases where animations are canceled by state changes</li>
+                                    <li><strong>Parent Transform</strong>: Verify correct parent transforms are used for tiles in different states</li>
+                                    <li><strong>Transforms</strong>: Ensure proper localPosition, localRotation, and localScale values are set</li>
+                                    <li><strong>Tile Spacing</strong>: Verify spacing calculations in <code>PositionHandTiles()</code></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="issue-item">
+                        <div class="issue-header">
+                            <h4>Reconnection Problems</h4>
+                        </div>
+                        <div class="issue-content">
+                            <div class="issue-symptoms">
+                                <h5>Symptoms</h5>
+                                <ul>
+                                    <li>Player cannot reconnect after disconnection</li>
+                                    <li>Game state is lost or incorrect after reconnection</li>
+                                    <li>UI shows incorrect or incomplete state after reconnect</li>
+                                </ul>
+                            </div>
+                            <div class="issue-solutions">
+                                <h5>Solutions</h5>
+                                <ul>
+                                    <li><strong>Reconnection Window</strong>: Check if player is reconnecting within the allowed time window (default 5 minutes)</li>
+                                    <li><strong>Server State</strong>: Verify the table still exists on server and has the player record</li>
+                                    <li><strong>Game State Rebuilding</strong>: Check that all components properly rebuild their state from server data</li>
+                                    <li><strong>Authentication Token</strong>: Ensure the same auth token is used for reconnection</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h3>Debugging Tips</h3>
+                <div class="debugging-tips">
+                    <div class="debug-tip">
+                        <h4>Enable Verbose Logging</h4>
+                        <p>SocketFramework has a <code>verboseLogging</code> option that can be enabled to show detailed connection logs:</p>
+                        <pre><code>// In Inspector or via code
+SocketFramework.Instance.verboseLogging = true;</code></pre>
+                    </div>
+                    
+                    <div class="debug-tip">
+                        <h4>Add Debug UI</h4>
+                        <p>Create a debug panel to visualize current game state:</p>
+                        <pre><code>// Example debug display in OnGUI
+void OnGUI()
+{
+    if (!showDebugInfo) return;
+    
+    GUI.Box(new Rect(10, 10, 300, 200), "Debug Info");
+    GUI.Label(new Rect(20, 30, 280, 20), $"Table ID: {tableId}");
+    GUI.Label(new Rect(20, 50, 280, 20), $"Is My Turn: {isMyTurn}");
+    GUI.Label(new Rect(20, 70, 280, 20), $"Current Round: {currentRound}");
+    GUI.Label(new Rect(20, 90, 280, 20), $"Current Wind: {currentWind}");
+    GUI.Label(new Rect(20, 110, 280, 20), $"Tiles in Hand: {currentHand.Length}");
+    GUI.Label(new Rect(20, 130, 280, 20), $"Server Status: {SocketFramework.Instance.IsConnected}");
+}</code></pre>
+                    </div>
+                    
+                    <div class="debug-tip">
+                        <h4>Event Tracing</h4>
+                        <p>Add explicit tracing to track event flow through the system:</p>
+                        <pre><code>// Add to beginning of event handlers
+private void OnTileDrawn(TileDrawnEvent evt)
+{
+    Debug.Log($"[EVENT] OnTileDrawn: {evt.DrawnTile}, " + 
+              $"Hand Count: {evt.Hand.Length}, " +
+              $"Replacement: {evt.IsReplacement}");
+    
+    // Original handler code
+}</code></pre>
+                    </div>
+                    
+                    <div class="debug-tip">
+                        <h4>Unity Profiler</h4>
+                        <p>Use the Unity Profiler to identify performance bottlenecks or heavy operations:</p>
+                        <ul>
+                            <li>Check for excessive allocations during network operations</li>
+                            <li>Monitor for framerate drops during tile animations or updates</li>
+                            <li>Watch for spikes when handling large network messages</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Mahjong Multiplayer System Documentation | Last Updated: April 2025</p>
+        </footer>
+    </div>
+
+    <script>
+        // Simple tab system
+        document.addEventListener('DOMContentLoaded', function() {
+            const tabButtons = document.querySelectorAll('.tab-button');
+            
+            tabButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    // Get the tab to activate
+                    const tabToActivate = this.getAttribute('data-tab');
+                    
+                    // Deactivate all tabs
+                    document.querySelectorAll('.tab-button').forEach(btn => {
+                        btn.classList.remove('active');
+                    });
+                    
+                    document.querySelectorAll('.tab-panel').forEach(panel => {
+                        panel.classList.remove('active');
+                    });
+                    
+                    // Activate the selected tab
+                    this.classList.add('active');
+                    document.getElementById(tabToActivate).classList.add('active');
+                });
+            });
+        });
+    </script>
+</body>
+</html>
